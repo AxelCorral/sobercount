@@ -1,15 +1,16 @@
 import React from 'react'
 import { getEvents } from '../storage.js'
 import { MINUTES_PER_CIGARETTE, MINUTES_PER_BEER } from '../constants.js'
-import { formatMinutes } from '../utils.js'
+import { formatMinutes, calcSportLifeMinutes } from '../utils.js'
 
 function groupByDay(events) {
   const map = {}
   events.forEach(e => {
     const day = e.timestamp.slice(0, 10)
-    if (!map[day]) map[day] = { beers: 0, cigs: 0 }
+    if (!map[day]) map[day] = { beers: 0, cigs: 0, sportSessions: [] }
     if (e.type === 'beer') map[day].beers++
-    else map[day].cigs++
+    else if (e.type === 'cigarette') map[day].cigs++
+    else if (e.type === 'sport') map[day].sportSessions.push(e)
   })
   return Object.entries(map).sort(([a], [b]) => b.localeCompare(a))
 }
@@ -36,36 +37,29 @@ export default function HistoryTab() {
         style={{ minHeight: '70vh' }}
       >
         <div className="text-6xl mb-4">💪</div>
-        <p className="text-lg font-medium" style={{ color: '#9ca3af' }}>
-          Commence ce soir !
-        </p>
-        <p className="text-sm mt-2" style={{ color: '#6b7280' }}>
-          Tes refus apparaîtront ici
-        </p>
+        <p className="text-lg font-medium" style={{ color: '#9ca3af' }}>Commence ce soir !</p>
+        <p className="text-sm mt-2" style={{ color: '#6b7280' }}>Tes refus apparaîtront ici</p>
       </div>
     )
   }
 
   return (
     <div className="p-4">
-      <h2 className="text-xl font-bold mb-4" style={{ color: '#f5f5f5' }}>
-        Historique
-      </h2>
+      <h2 className="text-xl font-bold mb-4" style={{ color: '#f5f5f5' }}>Historique</h2>
 
       <div className="flex flex-col gap-3">
-        {groups.map(([day, { beers, cigs }]) => {
-          const minutes = beers * MINUTES_PER_BEER + cigs * MINUTES_PER_CIGARETTE
+        {groups.map(([day, { beers, cigs, sportSessions }]) => {
+          const avoidMin = beers * MINUTES_PER_BEER + cigs * MINUTES_PER_CIGARETTE
+          const sportDurationMin = sportSessions.reduce((s, e) => s + (e.duration_minutes || 0), 0)
+          const sportLifeMin = sportSessions.reduce((s, e) => s + calcSportLifeMinutes(e), 0)
+
           return (
-            <div
-              key={day}
-              className="rounded-2xl p-4"
-              style={{ backgroundColor: '#1a1a1a' }}
-            >
+            <div key={day} className="rounded-2xl p-4" style={{ backgroundColor: '#1a1a1a' }}>
               <p className="text-sm font-semibold mb-3" style={{ color: '#e5e7eb' }}>
                 {frenchDate(day)}
               </p>
 
-              <div className="flex gap-3 flex-wrap">
+              <div className="flex gap-3 flex-wrap mb-2">
                 {beers > 0 && (
                   <div className="flex items-center gap-2">
                     <span className="text-xl">🍺</span>
@@ -84,10 +78,28 @@ export default function HistoryTab() {
                     </span>
                   </div>
                 )}
+                {sportSessions.length > 0 && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl">🏃</span>
+                    <span className="font-bold" style={{ color: '#3b82f6' }}>{sportSessions.length}</span>
+                    <span className="text-xs" style={{ color: '#6b7280' }}>
+                      séance{sportSessions.length > 1 ? 's' : ''} · {sportDurationMin} min
+                    </span>
+                  </div>
+                )}
               </div>
 
-              <div className="mt-2 text-sm font-medium" style={{ color: '#22c55e' }}>
-                +{formatMinutes(minutes)} de vie gagnée
+              <div className="space-y-0.5">
+                {avoidMin > 0 && (
+                  <div className="text-sm font-medium" style={{ color: '#22c55e' }}>
+                    +{formatMinutes(avoidMin)} via refus
+                  </div>
+                )}
+                {sportLifeMin > 0 && (
+                  <div className="text-sm font-medium" style={{ color: '#3b82f6' }}>
+                    +{formatMinutes(sportLifeMin)} via sport
+                  </div>
+                )}
               </div>
             </div>
           )
