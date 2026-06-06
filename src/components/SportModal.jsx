@@ -30,7 +30,8 @@ export default function SportModal({ onConfirm, onClose }) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end"
+      className="fixed inset-0 flex items-end"
+      style={{ zIndex: 200 }}
       style={{ backgroundColor: 'rgba(0,0,0,0.78)' }}
       onClick={onClose}
     >
@@ -41,7 +42,7 @@ export default function SportModal({ onConfirm, onClose }) {
           maxWidth: '480px',
           margin: '0 auto',
           padding: '20px 16px',
-          paddingBottom: 'calc(20px + env(safe-area-inset-bottom))',
+          paddingBottom: 'calc(80px + env(safe-area-inset-bottom))',
         }}
         onClick={e => e.stopPropagation()}
       >
