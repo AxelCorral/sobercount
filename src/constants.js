@@ -9,7 +9,7 @@ export const MINUTES_PER_CIGARETTE = 11
 // Source : GBD 2016 Alcohol Collaborators. "Alcohol use and burden for 195 countries and
 //          territories, 1990–2016." The Lancet, Vol. 392, Issue 10152, Sept. 2018.
 //          (calcul : ~2.3 unités standard × ~13 min/unité)
-export const MINUTES_PER_BEER = 30
+export const MINUTES_PER_BEER = 15
 
 export const SOURCES = {
   cigarette: 'Doll & Peto, BMJ 2004',

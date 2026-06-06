@@ -48,7 +48,7 @@ export default function HomeTab() {
         >
           <div className="text-5xl leading-none mb-2">🍺</div>
           <div className="text-xl font-bold" style={{ color: '#f59e0b' }}>Pinte refusée</div>
-          <div className="text-xs mt-1" style={{ color: '#92400e' }}>568 ml · +30 min de vie</div>
+          <div className="text-xs mt-1" style={{ color: '#92400e' }}>568 ml · +15 min de vie</div>
         </button>
 
         <button
