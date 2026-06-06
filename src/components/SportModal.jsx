@@ -31,8 +31,7 @@ export default function SportModal({ onConfirm, onClose }) {
   return (
     <div
       className="fixed inset-0 flex items-end"
-      style={{ zIndex: 200 }}
-      style={{ backgroundColor: 'rgba(0,0,0,0.78)' }}
+      style={{ zIndex: 200, backgroundColor: 'rgba(0,0,0,0.78)' }}
       onClick={onClose}
     >
       <div

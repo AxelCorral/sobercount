@@ -1,16 +1,19 @@
 import React from 'react'
 import { getEvents } from '../storage.js'
-import { MINUTES_PER_CIGARETTE, MINUTES_PER_BEER } from '../constants.js'
+import { MINUTES_PER_CIGARETTE, MINUTES_PER_BEER, HYDRATION_LIFE_GAIN_MINUTES } from '../constants.js'
 import { formatMinutes, calcSportLifeMinutes } from '../utils.js'
 
 function groupByDay(events) {
   const map = {}
   events.forEach(e => {
-    const day = e.timestamp.slice(0, 10)
-    if (!map[day]) map[day] = { beers: 0, cigs: 0, sportSessions: [] }
+    const day = e.type === 'hydration'
+      ? (e.date || e.timestamp.slice(0, 10))
+      : e.timestamp.slice(0, 10)
+    if (!map[day]) map[day] = { beers: 0, cigs: 0, sportSessions: [], hydrated: false }
     if (e.type === 'beer') map[day].beers++
     else if (e.type === 'cigarette') map[day].cigs++
     else if (e.type === 'sport') map[day].sportSessions.push(e)
+    else if (e.type === 'hydration') map[day].hydrated = true
   })
   return Object.entries(map).sort(([a], [b]) => b.localeCompare(a))
 }
@@ -48,10 +51,11 @@ export default function HistoryTab() {
       <h2 className="text-xl font-bold mb-4" style={{ color: '#f5f5f5' }}>Historique</h2>
 
       <div className="flex flex-col gap-3">
-        {groups.map(([day, { beers, cigs, sportSessions }]) => {
+        {groups.map(([day, { beers, cigs, sportSessions, hydrated }]) => {
           const avoidMin = beers * MINUTES_PER_BEER + cigs * MINUTES_PER_CIGARETTE
           const sportDurationMin = sportSessions.reduce((s, e) => s + (e.duration_minutes || 0), 0)
           const sportLifeMin = sportSessions.reduce((s, e) => s + calcSportLifeMinutes(e), 0)
+          const hydrationLifeMin = hydrated ? HYDRATION_LIFE_GAIN_MINUTES : 0
 
           return (
             <div key={day} className="rounded-2xl p-4" style={{ backgroundColor: '#1a1a1a' }}>
@@ -87,6 +91,12 @@ export default function HistoryTab() {
                     </span>
                   </div>
                 )}
+                {hydrated && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl">💧</span>
+                    <span className="text-xs font-medium" style={{ color: '#06b6d4' }}>Journée hydratée</span>
+                  </div>
+                )}
               </div>
 
               <div className="space-y-0.5">
@@ -98,6 +108,11 @@ export default function HistoryTab() {
                 {sportLifeMin > 0 && (
                   <div className="text-sm font-medium" style={{ color: '#3b82f6' }}>
                     +{formatMinutes(sportLifeMin)} via sport
+                  </div>
+                )}
+                {hydrationLifeMin > 0 && (
+                  <div className="text-sm font-medium" style={{ color: '#06b6d4' }}>
+                    +{formatMinutes(hydrationLifeMin)} via hydratation
                   </div>
                 )}
               </div>

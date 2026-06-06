@@ -5,7 +5,11 @@ import {
   ResponsiveContainer,
 } from 'recharts'
 import { getEvents } from '../storage.js'
-import { MINUTES_PER_CIGARETTE, MINUTES_PER_BEER } from '../constants.js'
+import {
+  MINUTES_PER_CIGARETTE,
+  MINUTES_PER_BEER,
+  HYDRATION_LIFE_GAIN_MINUTES,
+} from '../constants.js'
 import { formatMinutes, calcSportLifeMinutes } from '../utils.js'
 
 const TOOLTIP_STYLE = {
@@ -42,6 +46,19 @@ export default function StatsTab() {
   const totalSportSessions = sportEvents.length
   const totalSportLifeMin = sportEvents.reduce((s, e) => s + calcSportLifeMinutes(e), 0)
 
+  const hydrationEvents = events.filter(e => e.type === 'hydration')
+  const totalHydratedDays = hydrationEvents.length
+  const totalHydrationLifeMin = totalHydratedDays * HYDRATION_LIFE_GAIN_MINUTES
+
+  // % de jours hydratés parmi les jours depuis la première activité
+  const allDates = events.map(e => e.timestamp.slice(0, 10)).sort()
+  const firstDate = allDates[0]
+  const today = new Date().toISOString().slice(0, 10)
+  const totalDays = firstDate
+    ? Math.max(1, Math.round((new Date(today + 'T12:00:00') - new Date(firstDate + 'T12:00:00')) / 86400000) + 1)
+    : 1
+  const hydrationPct = Math.round((totalHydratedDays / totalDays) * 100)
+
   if (events.length === 0) {
     return (
       <div
@@ -72,25 +89,37 @@ export default function StatsTab() {
     Clopes: byDay[day]?.cigs ?? 0,
   }))
 
-  // Cumul par jour : refus (perdu évité) + sport (gagné) + bilan
+  // Cumul par jour : refus + sport + hydration + bilan net
   const sorted = [...events].sort((a, b) => a.timestamp.localeCompare(b.timestamp))
-  let cumAvoid = 0, cumSport = 0
+  let cumAvoid = 0, cumSport = 0, cumHydration = 0
   const cumByDay = {}
 
   sorted.forEach(e => {
-    const day = e.timestamp.slice(0, 10)
+    const day = e.type === 'hydration'
+      ? (e.date || e.timestamp.slice(0, 10))
+      : e.timestamp.slice(0, 10)
     if (e.type === 'beer') cumAvoid += MINUTES_PER_BEER
     else if (e.type === 'cigarette') cumAvoid += MINUTES_PER_CIGARETTE
     else if (e.type === 'sport') cumSport += calcSportLifeMinutes(e)
-    cumByDay[day] = { avoid: cumAvoid, sport: cumSport, net: Math.round(cumSport - cumAvoid) }
+    else if (e.type === 'hydration') cumHydration += HYDRATION_LIFE_GAIN_MINUTES
+    cumByDay[day] = {
+      avoid: cumAvoid,
+      sport: cumSport,
+      hydration: cumHydration,
+      net: Math.round(cumSport + cumHydration - cumAvoid),
+    }
   })
 
   const cumulEntries = Object.entries(cumByDay).sort(([a], [b]) => a.localeCompare(b))
 
-  const combinedLineData = cumulEntries.map(([day, { avoid, sport, net }]) => ({
+  const hasHydration = totalHydratedDays > 0
+  const hasSport = totalSportSessions > 0
+
+  const combinedLineData = cumulEntries.map(([day, { avoid, sport, hydration, net }]) => ({
     name: shortDate(day),
     'Refus': avoid,
     'Sport': sport,
+    ...(hasHydration ? { 'Hydra': hydration } : {}),
     'Bilan': net,
   }))
 
@@ -100,8 +129,6 @@ export default function StatsTab() {
       name: shortDate(day),
       'Min gagnées': sport,
     }))
-
-  const hasSport = totalSportSessions > 0
 
   return (
     <div className="p-4 pb-4">
@@ -126,7 +153,7 @@ export default function StatsTab() {
       </div>
 
       {/* Stat cards — sport */}
-      <div className="flex gap-2 mb-4">
+      <div className="flex gap-2 mb-2">
         <div className="flex-1 rounded-2xl p-3 text-center" style={{ backgroundColor: '#0a1628', border: '1px solid #3b82f6' }}>
           <div className="text-2xl font-bold" style={{ color: '#3b82f6' }}>{totalSportSessions}</div>
           <div className="text-xs mt-0.5" style={{ color: '#6b7280' }}>🏃 séances</div>
@@ -136,6 +163,25 @@ export default function StatsTab() {
             {totalSportLifeMin > 0 ? formatMinutes(totalSportLifeMin) : '—'}
           </div>
           <div className="text-xs mt-0.5" style={{ color: '#6b7280' }}>⏱ sport</div>
+        </div>
+      </div>
+
+      {/* Stat card — hydration */}
+      <div className="flex gap-2 mb-4">
+        <div className="flex-1 rounded-2xl p-3 text-center" style={{ backgroundColor: '#071620', border: '1px solid #06b6d4' }}>
+          <div className="text-2xl font-bold" style={{ color: '#06b6d4' }}>{totalHydratedDays}</div>
+          <div className="text-xs mt-0.5" style={{ color: '#6b7280' }}>💧 jours hydratés</div>
+          {totalHydratedDays > 0 && (
+            <div className="text-[10px] mt-0.5" style={{ color: '#0e7490' }}>
+              {hydrationPct}% de {totalDays}j
+            </div>
+          )}
+        </div>
+        <div className="flex-1 rounded-2xl p-3 text-center" style={{ backgroundColor: '#071620', border: '1px solid #06b6d4' }}>
+          <div className="text-lg font-bold leading-tight" style={{ color: '#06b6d4' }}>
+            {totalHydrationLifeMin > 0 ? formatMinutes(totalHydrationLifeMin) : '—'}
+          </div>
+          <div className="text-xs mt-0.5" style={{ color: '#6b7280' }}>⏱ hydratation</div>
         </div>
       </div>
 
@@ -166,7 +212,7 @@ export default function StatsTab() {
         </div>
       </div>
 
-      {/* Line chart : bilan cumulé (refus + sport + net) */}
+      {/* Line chart : bilan cumulé */}
       <div className="rounded-2xl p-4 mb-4" style={{ backgroundColor: '#1a1a1a' }}>
         <p className="text-sm font-semibold mb-3" style={{ color: '#e5e7eb' }}>
           Bilan cumulé (minutes)
@@ -193,6 +239,16 @@ export default function StatsTab() {
               dot={false}
               activeDot={{ r: 4, fill: '#3b82f6', strokeWidth: 0 }}
             />
+            {hasHydration && (
+              <Line
+                type="monotone"
+                dataKey="Hydra"
+                stroke="#06b6d4"
+                strokeWidth={2}
+                dot={false}
+                activeDot={{ r: 4, fill: '#06b6d4', strokeWidth: 0 }}
+              />
+            )}
             <Line
               type="monotone"
               dataKey="Bilan"
@@ -204,7 +260,7 @@ export default function StatsTab() {
             />
           </LineChart>
         </ResponsiveContainer>
-        <div className="flex gap-4 justify-center mt-2 flex-wrap">
+        <div className="flex gap-3 justify-center mt-2 flex-wrap">
           <div className="flex items-center gap-1.5">
             <div className="w-4 h-0.5" style={{ backgroundColor: '#22c55e' }} />
             <span className="text-xs" style={{ color: '#6b7280' }}>Refus</span>
@@ -213,6 +269,12 @@ export default function StatsTab() {
             <div className="w-4 h-0.5" style={{ backgroundColor: '#3b82f6' }} />
             <span className="text-xs" style={{ color: '#6b7280' }}>Sport</span>
           </div>
+          {hasHydration && (
+            <div className="flex items-center gap-1.5">
+              <div className="w-4 h-0.5" style={{ backgroundColor: '#06b6d4' }} />
+              <span className="text-xs" style={{ color: '#6b7280' }}>Hydra</span>
+            </div>
+          )}
           <div className="flex items-center gap-1.5">
             <div className="w-4 h-0.5" style={{ backgroundColor: '#a3e635' }} />
             <span className="text-xs" style={{ color: '#6b7280' }}>Bilan net</span>

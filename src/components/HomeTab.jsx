@@ -1,11 +1,33 @@
 import React, { useState } from 'react'
-import { getEvents, addEvent, clearAll } from '../storage.js'
-import { MINUTES_PER_CIGARETTE, MINUTES_PER_BEER } from '../constants.js'
+import { getEvents, addEvent, clearAll, getProfile, isHydrationDoneToday } from '../storage.js'
+import {
+  MINUTES_PER_CIGARETTE,
+  MINUTES_PER_BEER,
+  HYDRATION_LIFE_GAIN_MINUTES,
+  calculateDailyWaterGoal,
+} from '../constants.js'
 import { formatMinutes, calcSportLifeMinutes } from '../utils.js'
 import SportModal from './SportModal.jsx'
 
-export default function HomeTab() {
+function calcHydrationStreak(hydrationEvents) {
+  const dates = new Set(hydrationEvents.map(e => e.date || e.timestamp.slice(0, 10)))
+  if (dates.size === 0) return 0
+  let streak = 0
+  const d = new Date()
+  while (true) {
+    const dateStr = d.toISOString().slice(0, 10)
+    if (dates.has(dateStr)) {
+      streak++
+      d.setDate(d.getDate() - 1)
+    } else break
+  }
+  return streak
+}
+
+export default function HomeTab({ onNavigate }) {
   const [events, setEvents] = useState(() => getEvents())
+  const [profile] = useState(() => getProfile())
+  const [hydratedToday, setHydratedToday] = useState(() => isHydrationDoneToday())
   const [showConfirm, setShowConfirm] = useState(false)
   const [showSportModal, setShowSportModal] = useState(false)
 
@@ -18,8 +40,15 @@ export default function HomeTab() {
   const totalSportDurationMin = sportEvents.reduce((s, e) => s + (e.duration_minutes || 0), 0)
   const totalSportLifeMin = sportEvents.reduce((s, e) => s + calcSportLifeMinutes(e), 0)
 
-  const netMinutes = totalSportLifeMin - avoidLostMin
+  const hydrationEvents = events.filter(e => e.type === 'hydration')
+  const totalHydrationDays = hydrationEvents.length
+  const totalHydrationLifeMin = totalHydrationDays * HYDRATION_LIFE_GAIN_MINUTES
+  const hydrationStreak = calcHydrationStreak(hydrationEvents)
+
+  const netMinutes = totalSportLifeMin + totalHydrationLifeMin - avoidLostMin
   const netPositive = netMinutes >= 0
+
+  const waterGoalMl = calculateDailyWaterGoal(profile)
 
   const refresh = () => setEvents(getEvents())
 
@@ -42,9 +71,17 @@ export default function HomeTab() {
     refresh()
   }
 
+  const handleHydration = () => {
+    if (navigator.vibrate) navigator.vibrate(50)
+    addEvent('hydration', { date: new Date().toISOString().slice(0, 10) })
+    refresh()
+    setHydratedToday(isHydrationDoneToday())
+  }
+
   const handleReset = () => {
     clearAll()
     setEvents([])
+    setHydratedToday(false)
     setShowConfirm(false)
   }
 
@@ -53,11 +90,32 @@ export default function HomeTab() {
       <div className="p-4 pb-4">
         {/* Header */}
         <div className="text-center mb-4 pt-1">
+          {profile?.prenom && (
+            <p className="text-sm font-medium mb-0.5" style={{ color: '#9ca3af' }}>
+              Bonjour {profile.prenom} 👋
+            </p>
+          )}
           <h1 className="text-2xl font-bold tracking-tight" style={{ color: '#f5f5f5' }}>
             SoberCount
           </h1>
           <p className="text-sm mt-0.5" style={{ color: '#6b7280' }}>Ce que tu as évité</p>
         </div>
+
+        {/* Bandeau profil si absent */}
+        {!profile && (
+          <button
+            onClick={() => onNavigate('profile')}
+            className="w-full rounded-2xl px-4 py-3 text-left mb-4 flex items-center gap-3"
+            style={{ backgroundColor: '#1a1205', border: '1px dashed #f59e0b' }}
+          >
+            <span className="text-2xl">👤</span>
+            <div className="flex-1">
+              <p className="text-sm font-medium" style={{ color: '#f59e0b' }}>Complète ton profil</p>
+              <p className="text-xs" style={{ color: '#92400e' }}>Pour personnaliser ton objectif d'hydratation</p>
+            </div>
+            <span className="text-lg" style={{ color: '#92400e' }}>›</span>
+          </button>
+        )}
 
         {/* Tap buttons */}
         <div className="flex flex-col gap-3 mb-4">
@@ -89,6 +147,25 @@ export default function HomeTab() {
             <div className="text-4xl leading-none mb-1.5">🏃</div>
             <div className="text-lg font-bold" style={{ color: '#3b82f6' }}>Séance faite !</div>
             <div className="text-xs mt-0.5" style={{ color: '#1d4ed8' }}>enregistrer une session sport</div>
+          </button>
+
+          <button
+            onClick={handleHydration}
+            className="w-full py-6 rounded-2xl text-center active:scale-[0.96] transition-transform duration-100 select-none"
+            style={{
+              backgroundColor: '#071a20',
+              border: `2px solid ${hydratedToday ? '#06b6d4' : '#164e63'}`,
+            }}
+          >
+            <div className="text-4xl leading-none mb-1.5">💧</div>
+            <div className="text-lg font-bold" style={{ color: hydratedToday ? '#06b6d4' : '#0e7490' }}>
+              {hydratedToday ? 'Objectif atteint ✓' : 'Journée hydratée !'}
+            </div>
+            <div className="text-xs mt-0.5" style={{ color: hydratedToday ? '#0e7490' : '#164e63' }}>
+              {hydratedToday
+                ? 'Appuie pour annuler'
+                : `+${HYDRATION_LIFE_GAIN_MINUTES} min de vie · objectif ${waterGoalMl.toLocaleString('fr-FR')} ml`}
+            </div>
           </button>
         </div>
 
@@ -127,6 +204,38 @@ export default function HomeTab() {
           </div>
           <div className="text-[10px] mt-1" style={{ color: '#1e3a5f' }}>
             Source : Lee et al. 2017, PLOS Medicine 2012
+          </div>
+        </div>
+
+        {/* Hydration card */}
+        <div
+          className="rounded-2xl p-4 mb-3"
+          style={{
+            backgroundColor: '#071620',
+            border: `2px solid ${hydratedToday ? '#06b6d4' : '#164e63'}`,
+          }}
+        >
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-sm font-semibold" style={{ color: '#22d3ee' }}>💧 Hydratation</span>
+            {hydratedToday && (
+              <span
+                className="text-xs px-2 py-0.5 rounded-full font-medium"
+                style={{ backgroundColor: '#083344', color: '#06b6d4' }}
+              >
+                ✓ Aujourd'hui
+              </span>
+            )}
+          </div>
+          <div className="text-xs mb-1" style={{ color: '#4b5563' }}>
+            {totalHydrationDays > 0
+              ? `${totalHydrationDays} jour${totalHydrationDays > 1 ? 's' : ''}${hydrationStreak > 1 ? ` · streak ${hydrationStreak} 🔥` : ''}`
+              : 'Pas encore de journée hydratée'}
+          </div>
+          <div key={`h${totalHydrationLifeMin}`} className="text-2xl font-bold count-pop" style={{ color: '#06b6d4' }}>
+            {totalHydrationLifeMin > 0 ? `+${formatMinutes(totalHydrationLifeMin)}` : '—'}
+          </div>
+          <div className="text-[10px] mt-1" style={{ color: '#164e63' }}>
+            Source : Dmitrieva et al., eBioMedicine 2023 (NIH/NHLBI)
           </div>
         </div>
 
@@ -169,7 +278,7 @@ export default function HomeTab() {
             {netMinutes === 0 ? '—' : `${netPositive ? '+' : '−'}${formatMinutes(Math.abs(netMinutes))}`}
           </div>
           <div className="text-xs" style={{ color: '#374151' }}>
-            sport − tabac &amp; alcool
+            sport + hydratation − tabac &amp; alcool
           </div>
         </div>
 
