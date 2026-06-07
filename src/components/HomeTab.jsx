@@ -1,25 +1,28 @@
 import React, { useState } from 'react'
-import { getEvents, addEvent, clearAll, getProfile, isHydrationDoneToday } from '../storage.js'
+import {
+  getEvents, addEvent, clearAll, getProfile,
+  isHydrationDoneToday, isSleepDoneToday,
+} from '../storage.js'
 import {
   MINUTES_PER_CIGARETTE,
   MINUTES_PER_BEER,
   HYDRATION_LIFE_GAIN_MINUTES,
   calculateDailyWaterGoal,
+  getSleepThreshold,
+  getSleepLifeGain,
 } from '../constants.js'
 import { formatMinutes, calcSportLifeMinutes } from '../utils.js'
 import SportModal from './SportModal.jsx'
 
-function calcHydrationStreak(hydrationEvents) {
-  const dates = new Set(hydrationEvents.map(e => e.date || e.timestamp.slice(0, 10)))
+function calcStreak(events, type) {
+  const dates = new Set(events.filter(e => e.type === type).map(e => e.date || e.timestamp.slice(0, 10)))
   if (dates.size === 0) return 0
   let streak = 0
   const d = new Date()
   while (true) {
     const dateStr = d.toISOString().slice(0, 10)
-    if (dates.has(dateStr)) {
-      streak++
-      d.setDate(d.getDate() - 1)
-    } else break
+    if (dates.has(dateStr)) { streak++; d.setDate(d.getDate() - 1) }
+    else break
   }
   return streak
 }
@@ -28,6 +31,7 @@ export default function HomeTab({ onNavigate }) {
   const [events, setEvents] = useState(() => getEvents())
   const [profile] = useState(() => getProfile())
   const [hydratedToday, setHydratedToday] = useState(() => isHydrationDoneToday())
+  const [sleptToday, setSleptToday] = useState(() => isSleepDoneToday())
   const [showConfirm, setShowConfirm] = useState(false)
   const [showSportModal, setShowSportModal] = useState(false)
 
@@ -43,11 +47,18 @@ export default function HomeTab({ onNavigate }) {
   const hydrationEvents = events.filter(e => e.type === 'hydration')
   const totalHydrationDays = hydrationEvents.length
   const totalHydrationLifeMin = totalHydrationDays * HYDRATION_LIFE_GAIN_MINUTES
-  const hydrationStreak = calcHydrationStreak(hydrationEvents)
+  const hydrationStreak = calcStreak(events, 'hydration')
 
-  const totalLifeGainMin = avoidLostMin + totalSportLifeMin + totalHydrationLifeMin
+  const sleepEvents = events.filter(e => e.type === 'sleep')
+  const totalSleepNights = sleepEvents.length
+  const sleepGainPerNight = getSleepLifeGain(profile?.age)
+  const totalSleepLifeMin = totalSleepNights * sleepGainPerNight
+  const sleepStreak = calcStreak(events, 'sleep')
+
+  const totalLifeGainMin = avoidLostMin + totalSportLifeMin + totalHydrationLifeMin + totalSleepLifeMin
 
   const waterGoalMl = calculateDailyWaterGoal(profile)
+  const sleepThresholdH = getSleepThreshold(profile?.age)
 
   const refresh = () => setEvents(getEvents())
 
@@ -77,10 +88,18 @@ export default function HomeTab({ onNavigate }) {
     setHydratedToday(isHydrationDoneToday())
   }
 
+  const handleSleep = () => {
+    if (navigator.vibrate) navigator.vibrate(50)
+    addEvent('sleep', { date: new Date().toISOString().slice(0, 10) })
+    refresh()
+    setSleptToday(isSleepDoneToday())
+  }
+
   const handleReset = () => {
     clearAll()
     setEvents([])
     setHydratedToday(false)
+    setSleptToday(false)
     setShowConfirm(false)
   }
 
@@ -166,6 +185,25 @@ export default function HomeTab({ onNavigate }) {
                 : `+${HYDRATION_LIFE_GAIN_MINUTES} min de vie · objectif ${waterGoalMl.toLocaleString('fr-FR')} ml`}
             </div>
           </button>
+
+          <button
+            onClick={handleSleep}
+            className="w-full py-6 rounded-2xl text-center active:scale-[0.96] transition-transform duration-100 select-none"
+            style={{
+              backgroundColor: '#130e20',
+              border: `2px solid ${sleptToday ? '#8b5cf6' : '#3b1f72'}`,
+            }}
+          >
+            <div className="text-4xl leading-none mb-1.5">😴</div>
+            <div className="text-lg font-bold" style={{ color: sleptToday ? '#a78bfa' : '#6d28d9' }}>
+              {sleptToday ? '✓ Bonne nuit enregistrée' : 'Bonne nuit ?'}
+            </div>
+            <div className="text-xs mt-0.5" style={{ color: sleptToday ? '#6d28d9' : '#3b1f72' }}>
+              {sleptToday
+                ? 'Appuie pour annuler'
+                : `Objectif : ${sleepThresholdH}h minimum (recommandé pour ton âge)`}
+            </div>
+          </button>
         </div>
 
         {/* Counters beer / cig */}
@@ -238,6 +276,39 @@ export default function HomeTab({ onNavigate }) {
           </div>
         </div>
 
+        {/* Sleep card */}
+        <div
+          className="rounded-2xl p-4 mb-3"
+          style={{
+            backgroundColor: '#130e20',
+            border: `2px solid ${sleptToday ? '#8b5cf6' : '#3b1f72'}`,
+          }}
+        >
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-sm font-semibold" style={{ color: '#c4b5fd' }}>😴 Sommeil</span>
+            {sleptToday ? (
+              <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ backgroundColor: '#2e1065', color: '#a78bfa' }}>
+                ✓ Bonne nuit
+              </span>
+            ) : (
+              <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ backgroundColor: '#1f1f1f', color: '#4b5563' }}>
+                À enregistrer
+              </span>
+            )}
+          </div>
+          <div className="text-xs mb-1" style={{ color: '#4b5563' }}>
+            {totalSleepNights > 0
+              ? `${totalSleepNights} nuit${totalSleepNights > 1 ? 's' : ''}${sleepStreak > 1 ? ` · série ${sleepStreak} 🔥` : ''}`
+              : 'Aucune bonne nuit enregistrée'}
+          </div>
+          <div key={`z${totalSleepLifeMin}`} className="text-2xl font-bold count-pop" style={{ color: '#8b5cf6' }}>
+            {totalSleepLifeMin > 0 ? `+${formatMinutes(totalSleepLifeMin)}` : '—'}
+          </div>
+          <div className="text-[10px] mt-1" style={{ color: '#3b1f72' }}>
+            Source : Irish et al. 2022, GeroScience 2025
+          </div>
+        </div>
+
         {/* VIE GAGNÉE — total unique */}
         <div
           className="rounded-2xl px-4 py-5 text-center mb-4"
@@ -254,7 +325,7 @@ export default function HomeTab({ onNavigate }) {
             {totalLifeGainMin > 0 ? `+${formatMinutes(totalLifeGainMin)}` : '—'}
           </div>
           <div className="text-xs" style={{ color: '#4b5563' }}>
-            sport · hydratation · vices refusés
+            sport · hydratation · sommeil · vices refusés
           </div>
         </div>
 

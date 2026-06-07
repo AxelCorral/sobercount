@@ -2,6 +2,7 @@
 // Contrat beer/cig   : { id, type, timestamp }
 // Contrat sport      : { id, type:'sport', timestamp, sport_type_id, duration_minutes }
 // Contrat hydration  : { id, type:'hydration', timestamp, date:'YYYY-MM-DD' }
+// Contrat sleep      : { id, type:'sleep', timestamp, date:'YYYY-MM-DD' }
 // Contrat profil     : { prenom, sexe:'homme'|'femme'|'autre', age, poids, taille }
 
 const KEY = 'sobercount_events'
@@ -20,9 +21,9 @@ export const addEvent = (type, options = {}) => {
   try {
     const events = getEvents()
 
-    if (type === 'hydration') {
+    if (type === 'hydration' || type === 'sleep') {
       const date = options.date || new Date().toISOString().slice(0, 10)
-      const idx = events.findIndex(e => e.type === 'hydration' && e.date === date)
+      const idx = events.findIndex(e => e.type === type && e.date === date)
       if (idx !== -1) {
         events.splice(idx, 1)
         localStorage.setItem(KEY, JSON.stringify(events))
@@ -30,7 +31,7 @@ export const addEvent = (type, options = {}) => {
       }
       const event = {
         id: crypto.randomUUID(),
-        type: 'hydration',
+        type,
         timestamp: new Date().toISOString(),
         date,
       }
@@ -56,6 +57,11 @@ export const addEvent = (type, options = {}) => {
 export const isHydrationDoneToday = () => {
   const today = new Date().toISOString().slice(0, 10)
   return getEvents().some(e => e.type === 'hydration' && e.date === today)
+}
+
+export const isSleepDoneToday = () => {
+  const today = new Date().toISOString().slice(0, 10)
+  return getEvents().some(e => e.type === 'sleep' && e.date === today)
 }
 
 export const getProfile = () => {

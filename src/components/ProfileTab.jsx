@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { getProfile, saveProfile } from '../storage.js'
-import { calculateDailyWaterGoal } from '../constants.js'
+import { calculateDailyWaterGoal, getSleepThreshold } from '../constants.js'
 
 const SEXE_OPTIONS = [
   { value: 'homme', label: 'Homme' },
@@ -39,6 +39,7 @@ export default function ProfileTab() {
 
   const waterGoal = calculateDailyWaterGoal(formProfile.poids ? formProfile : null)
   const glasses = Math.round(waterGoal / 250)
+  const sleepThreshold = getSleepThreshold(formProfile.age)
 
   const handleSave = () => {
     saveProfile(formProfile)
@@ -144,7 +145,7 @@ export default function ProfileTab() {
           {savedOk ? '✓ Profil sauvegardé !' : 'Sauvegarder mon profil'}
         </button>
 
-        {/* Carte synthèse — objectif eau */}
+        {/* Cartes synthèse */}
         {formProfile.poids && (
           <div
             className="rounded-2xl p-4"
@@ -164,6 +165,21 @@ export default function ProfileTab() {
             </p>
           </div>
         )}
+
+        <div
+          className="rounded-2xl p-4"
+          style={{ backgroundColor: '#130e20', border: '2px solid #8b5cf6' }}
+        >
+          <p className="text-sm font-semibold mb-1" style={{ color: '#c4b5fd' }}>
+            😴 Sommeil recommandé
+          </p>
+          <p className="text-2xl font-bold" style={{ color: '#8b5cf6' }}>
+            {sleepThreshold}h minimum par nuit
+          </p>
+          <p className="text-[10px] mt-2" style={{ color: '#3b1f72' }}>
+            Source : National Sleep Foundation 2015
+          </p>
+        </div>
       </div>
     </div>
   )

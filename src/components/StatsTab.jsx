@@ -4,11 +4,12 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer,
 } from 'recharts'
-import { getEvents } from '../storage.js'
+import { getEvents, getProfile } from '../storage.js'
 import {
   MINUTES_PER_CIGARETTE,
   MINUTES_PER_BEER,
   HYDRATION_LIFE_GAIN_MINUTES,
+  getSleepLifeGain,
 } from '../constants.js'
 import { formatMinutes, calcSportLifeMinutes } from '../utils.js'
 
@@ -37,6 +38,8 @@ function shortDate(isoDay) {
 
 export default function StatsTab() {
   const events = getEvents()
+  const profile = getProfile()
+  const sleepGainPerNight = getSleepLifeGain(profile?.age)
 
   const totalBeers = events.filter(e => e.type === 'beer').length
   const totalCigs = events.filter(e => e.type === 'cigarette').length
@@ -50,7 +53,11 @@ export default function StatsTab() {
   const totalHydratedDays = hydrationEvents.length
   const totalHydrationLifeMin = totalHydratedDays * HYDRATION_LIFE_GAIN_MINUTES
 
-  // % de jours hydratés parmi les jours depuis la première activité
+  const sleepEvents = events.filter(e => e.type === 'sleep')
+  const totalSleepNights = sleepEvents.length
+  const totalSleepLifeMin = totalSleepNights * sleepGainPerNight
+
+  // % de jours hydratés/dormis parmi les jours depuis la première activité
   const allDates = events.map(e => e.timestamp.slice(0, 10)).sort()
   const firstDate = allDates[0]
   const today = new Date().toISOString().slice(0, 10)
@@ -58,6 +65,7 @@ export default function StatsTab() {
     ? Math.max(1, Math.round((new Date(today + 'T12:00:00') - new Date(firstDate + 'T12:00:00')) / 86400000) + 1)
     : 1
   const hydrationPct = Math.round((totalHydratedDays / totalDays) * 100)
+  const sleepPct = Math.round((totalSleepNights / totalDays) * 100)
 
   if (events.length === 0) {
     return (
@@ -92,32 +100,35 @@ export default function StatsTab() {
   // Répartition des gains
   const cigMin = totalCigs * MINUTES_PER_CIGARETTE
   const beerMin = totalBeers * MINUTES_PER_BEER
-  const totalGainMin = totalAvoidMin + totalSportLifeMin + totalHydrationLifeMin
+  const totalGainMin = totalAvoidMin + totalSportLifeMin + totalHydrationLifeMin + totalSleepLifeMin
   const breakdown = [
     { label: '🏃 Sport', value: totalSportLifeMin, color: '#3b82f6' },
     { label: '💧 Hydratation', value: totalHydrationLifeMin, color: '#06b6d4' },
+    { label: '😴 Sommeil', value: totalSleepLifeMin, color: '#8b5cf6' },
     { label: '🚬 Clopes refusées', value: cigMin, color: '#ef4444' },
     { label: '🍺 Bières refusées', value: beerMin, color: '#f59e0b' },
   ].filter(b => b.value > 0)
 
   // Cumul par jour
   const sorted = [...events].sort((a, b) => a.timestamp.localeCompare(b.timestamp))
-  let cumAvoid = 0, cumSport = 0, cumHydration = 0
+  let cumAvoid = 0, cumSport = 0, cumHydration = 0, cumSleep = 0
   const cumByDay = {}
 
   sorted.forEach(e => {
-    const day = e.type === 'hydration'
+    const day = (e.type === 'hydration' || e.type === 'sleep')
       ? (e.date || e.timestamp.slice(0, 10))
       : e.timestamp.slice(0, 10)
     if (e.type === 'beer') cumAvoid += MINUTES_PER_BEER
     else if (e.type === 'cigarette') cumAvoid += MINUTES_PER_CIGARETTE
     else if (e.type === 'sport') cumSport += calcSportLifeMinutes(e)
     else if (e.type === 'hydration') cumHydration += HYDRATION_LIFE_GAIN_MINUTES
+    else if (e.type === 'sleep') cumSleep += sleepGainPerNight
     cumByDay[day] = {
       avoid: cumAvoid,
       sport: cumSport,
       hydration: cumHydration,
-      total: Math.round(cumAvoid + cumSport + cumHydration),
+      sleep: cumSleep,
+      total: Math.round(cumAvoid + cumSport + cumHydration + cumSleep),
     }
   })
 
@@ -125,12 +136,14 @@ export default function StatsTab() {
 
   const hasHydration = totalHydratedDays > 0
   const hasSport = totalSportSessions > 0
+  const hasSleep = totalSleepNights > 0
 
-  const combinedLineData = cumulEntries.map(([day, { avoid, sport, hydration, total }]) => ({
+  const combinedLineData = cumulEntries.map(([day, { avoid, sport, hydration, sleep, total }]) => ({
     name: shortDate(day),
     'Refus': avoid,
     'Sport': sport,
     ...(hasHydration ? { 'Hydra': hydration } : {}),
+    ...(hasSleep ? { 'Sommeil': sleep } : {}),
     'Total': total,
   }))
 
@@ -177,8 +190,8 @@ export default function StatsTab() {
         </div>
       </div>
 
-      {/* Stat card — hydration */}
-      <div className="flex gap-2 mb-4">
+      {/* Stat card — hydration + sleep */}
+      <div className="flex gap-2 mb-2">
         <div className="flex-1 rounded-2xl p-3 text-center" style={{ backgroundColor: '#071620', border: '1px solid #06b6d4' }}>
           <div className="text-2xl font-bold" style={{ color: '#06b6d4' }}>{totalHydratedDays}</div>
           <div className="text-xs mt-0.5" style={{ color: '#6b7280' }}>💧 jours hydratés</div>
@@ -193,6 +206,23 @@ export default function StatsTab() {
             {totalHydrationLifeMin > 0 ? formatMinutes(totalHydrationLifeMin) : '—'}
           </div>
           <div className="text-xs mt-0.5" style={{ color: '#6b7280' }}>⏱ hydratation</div>
+        </div>
+      </div>
+      <div className="flex gap-2 mb-4">
+        <div className="flex-1 rounded-2xl p-3 text-center" style={{ backgroundColor: '#130e20', border: '1px solid #8b5cf6' }}>
+          <div className="text-2xl font-bold" style={{ color: '#8b5cf6' }}>{totalSleepNights}</div>
+          <div className="text-xs mt-0.5" style={{ color: '#6b7280' }}>😴 nuits suffisantes</div>
+          {totalSleepNights > 0 && (
+            <div className="text-[10px] mt-0.5" style={{ color: '#6d28d9' }}>
+              {sleepPct}% de {totalDays}j
+            </div>
+          )}
+        </div>
+        <div className="flex-1 rounded-2xl p-3 text-center" style={{ backgroundColor: '#130e20', border: '1px solid #8b5cf6' }}>
+          <div className="text-lg font-bold leading-tight" style={{ color: '#8b5cf6' }}>
+            {totalSleepLifeMin > 0 ? formatMinutes(totalSleepLifeMin) : '—'}
+          </div>
+          <div className="text-xs mt-0.5" style={{ color: '#6b7280' }}>⏱ sommeil</div>
         </div>
       </div>
 
@@ -227,6 +257,7 @@ export default function StatsTab() {
               {[
                 totalSportLifeMin > 0 && `sport : ${formatMinutes(totalSportLifeMin)}`,
                 totalHydrationLifeMin > 0 && `hydratation : ${formatMinutes(totalHydrationLifeMin)}`,
+                totalSleepLifeMin > 0 && `sommeil : ${formatMinutes(totalSleepLifeMin)}`,
                 totalAvoidMin > 0 && `vices refusés : ${formatMinutes(totalAvoidMin)}`,
               ].filter(Boolean).join(' · ')}
             </div>
@@ -298,6 +329,16 @@ export default function StatsTab() {
                 activeDot={{ r: 4, fill: '#06b6d4', strokeWidth: 0 }}
               />
             )}
+            {hasSleep && (
+              <Line
+                type="monotone"
+                dataKey="Sommeil"
+                stroke="#8b5cf6"
+                strokeWidth={2}
+                dot={false}
+                activeDot={{ r: 4, fill: '#8b5cf6', strokeWidth: 0 }}
+              />
+            )}
             <Line
               type="monotone"
               dataKey="Total"
@@ -322,6 +363,12 @@ export default function StatsTab() {
             <div className="flex items-center gap-1.5">
               <div className="w-4 h-0.5" style={{ backgroundColor: '#06b6d4' }} />
               <span className="text-xs" style={{ color: '#6b7280' }}>Hydra</span>
+            </div>
+          )}
+          {hasSleep && (
+            <div className="flex items-center gap-1.5">
+              <div className="w-4 h-0.5" style={{ backgroundColor: '#8b5cf6' }} />
+              <span className="text-xs" style={{ color: '#6b7280' }}>Sommeil</span>
             </div>
           )}
           <div className="flex items-center gap-1.5">

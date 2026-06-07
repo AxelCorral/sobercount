@@ -67,3 +67,32 @@ export function calculateDailyWaterGoal(profile) {
   else if (profile.age && profile.age > 55) base -= 200
   return Math.max(1500, Math.min(4000, Math.round(base)))
 }
+
+// Seuil minimum de durée de sommeil par tranche d'âge
+// Source : National Sleep Foundation (2015), consensus AASM/SRS
+// Hirshkowitz M. et al., Sleep Health Journal, 2015
+export const SLEEP_DURATION_THRESHOLDS = [
+  { maxAge: 17, minHours: 8 },
+  { maxAge: 64, minHours: 7 },
+  { maxAge: 99, minHours: 7 },
+]
+
+// Vie gagnée par bonne nuit selon l'âge (en minutes)
+// Source : Irish LA et al., Sleep Health Journal 2022
+// Méta-analyse GeroScience 2025 : 14% hausse mortalité < 7h/nuit
+export const SLEEP_LIFE_GAIN_BY_AGE = [
+  { maxAge: 30, minutesPerNight: 35 },
+  { maxAge: 55, minutesPerNight: 30 },
+  { maxAge: 64, minutesPerNight: 25 },
+  { maxAge: 99, minutesPerNight: 20 },
+]
+
+export function getSleepThreshold(age) {
+  if (!age) return 7
+  return SLEEP_DURATION_THRESHOLDS.find(t => age <= t.maxAge)?.minHours || 7
+}
+
+export function getSleepLifeGain(age) {
+  if (!age) return 30
+  return SLEEP_LIFE_GAIN_BY_AGE.find(t => age <= t.maxAge)?.minutesPerNight || 30
+}
