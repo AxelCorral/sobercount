@@ -14,18 +14,6 @@ import {
 import { formatMinutes, calcSportLifeMinutes } from '../utils.js'
 import SportModal from './SportModal.jsx'
 
-function calcStreak(events, type) {
-  const dates = new Set(events.filter(e => e.type === type).map(e => e.date || e.timestamp.slice(0, 10)))
-  if (dates.size === 0) return 0
-  let streak = 0
-  const d = new Date()
-  while (true) {
-    const dateStr = d.toISOString().slice(0, 10)
-    if (dates.has(dateStr)) { streak++; d.setDate(d.getDate() - 1) }
-    else break
-  }
-  return streak
-}
 
 export default function HomeTab({ onNavigate, events, onEventsChange }) {
   const [profile] = useState(() => getProfile())
@@ -40,21 +28,15 @@ export default function HomeTab({ onNavigate, events, onEventsChange }) {
   const cigarettes = events.filter(e => e.type === 'cigarette').length
   const avoidLostMin = beers * MINUTES_PER_BEER + cigarettes * MINUTES_PER_CIGARETTE
 
-  const sportEvents = events.filter(e => e.type === 'sport')
-  const totalSportSessions = sportEvents.length
-  const totalSportDurationMin = sportEvents.reduce((s, e) => s + (e.duration_minutes || 0), 0)
-  const totalSportLifeMin = sportEvents.reduce((s, e) => s + calcSportLifeMinutes(e), 0)
+  const totalSportLifeMin = events
+    .filter(e => e.type === 'sport')
+    .reduce((s, e) => s + calcSportLifeMinutes(e), 0)
 
-  const hydrationEvents = events.filter(e => e.type === 'hydration')
-  const totalHydrationDays = hydrationEvents.length
-  const totalHydrationLifeMin = totalHydrationDays * HYDRATION_LIFE_GAIN_MINUTES
-  const hydrationStreak = calcStreak(events, 'hydration')
+  const totalHydrationLifeMin =
+    events.filter(e => e.type === 'hydration').length * HYDRATION_LIFE_GAIN_MINUTES
 
-  const sleepEvents = events.filter(e => e.type === 'sleep')
-  const totalSleepNights = sleepEvents.length
-  const sleepGainPerNight = getSleepLifeGain(profile?.age)
-  const totalSleepLifeMin = totalSleepNights * sleepGainPerNight
-  const sleepStreak = calcStreak(events, 'sleep')
+  const totalSleepLifeMin =
+    events.filter(e => e.type === 'sleep').length * getSleepLifeGain(profile?.age)
 
   const totalLifeGainMin = avoidLostMin + totalSportLifeMin + totalHydrationLifeMin + totalSleepLifeMin
 
@@ -214,93 +196,6 @@ export default function HomeTab({ onNavigate, events, onEventsChange }) {
               {cigarettes}
             </div>
             <div className="text-xs mt-1" style={{ color: '#6b7280' }}>clopes évitées</div>
-          </div>
-        </div>
-
-        {/* Sport card */}
-        <div
-          className="rounded-2xl p-4 mb-3"
-          style={{ backgroundColor: '#0a1628', border: '2px solid #3b82f6' }}
-        >
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-sm font-semibold" style={{ color: '#93c5fd' }}>🏃 Séances de sport</span>
-            <span key={`s${totalSportSessions}`} className="text-lg font-bold count-pop" style={{ color: '#3b82f6' }}>
-              {totalSportSessions}
-            </span>
-          </div>
-          <div className="text-xs mb-1" style={{ color: '#4b5563' }}>
-            {totalSportDurationMin > 0 ? `${totalSportDurationMin} min pratiquées` : 'Aucune séance'}
-          </div>
-          <div key={`sl${totalSportLifeMin}`} className="text-2xl font-bold count-pop" style={{ color: '#3b82f6' }}>
-            {totalSportLifeMin > 0 ? `+${formatMinutes(totalSportLifeMin)}` : '—'}
-          </div>
-          <div className="text-[10px] mt-1" style={{ color: '#1e3a5f' }}>
-            Source : Lee et al. 2017, PLOS Medicine 2012
-          </div>
-        </div>
-
-        {/* Hydration card */}
-        <div
-          className="rounded-2xl p-4 mb-3"
-          style={{
-            backgroundColor: '#071620',
-            border: `2px solid ${hydratedToday ? '#06b6d4' : '#164e63'}`,
-          }}
-        >
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-sm font-semibold" style={{ color: '#22d3ee' }}>💧 Hydratation</span>
-            {hydratedToday && (
-              <span
-                className="text-xs px-2 py-0.5 rounded-full font-medium"
-                style={{ backgroundColor: '#083344', color: '#06b6d4' }}
-              >
-                ✓ Aujourd'hui
-              </span>
-            )}
-          </div>
-          <div className="text-xs mb-1" style={{ color: '#4b5563' }}>
-            {totalHydrationDays > 0
-              ? `${totalHydrationDays} jour${totalHydrationDays > 1 ? 's' : ''}${hydrationStreak > 1 ? ` · streak ${hydrationStreak} 🔥` : ''}`
-              : 'Pas encore de journée hydratée'}
-          </div>
-          <div key={`h${totalHydrationLifeMin}`} className="text-2xl font-bold count-pop" style={{ color: '#06b6d4' }}>
-            {totalHydrationLifeMin > 0 ? `+${formatMinutes(totalHydrationLifeMin)}` : '—'}
-          </div>
-          <div className="text-[10px] mt-1" style={{ color: '#164e63' }}>
-            Source : Dmitrieva et al., eBioMedicine 2023 (NIH/NHLBI)
-          </div>
-        </div>
-
-        {/* Sleep card */}
-        <div
-          className="rounded-2xl p-4 mb-3"
-          style={{
-            backgroundColor: '#130e20',
-            border: `2px solid ${sleptToday ? '#8b5cf6' : '#3b1f72'}`,
-          }}
-        >
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-sm font-semibold" style={{ color: '#c4b5fd' }}>😴 Sommeil</span>
-            {sleptToday ? (
-              <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ backgroundColor: '#2e1065', color: '#a78bfa' }}>
-                ✓ Bonne nuit
-              </span>
-            ) : (
-              <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ backgroundColor: '#1f1f1f', color: '#4b5563' }}>
-                À enregistrer
-              </span>
-            )}
-          </div>
-          <div className="text-xs mb-1" style={{ color: '#4b5563' }}>
-            {totalSleepNights > 0
-              ? `${totalSleepNights} nuit${totalSleepNights > 1 ? 's' : ''}${sleepStreak > 1 ? ` · série ${sleepStreak} 🔥` : ''}`
-              : 'Aucune bonne nuit enregistrée'}
-          </div>
-          <div key={`z${totalSleepLifeMin}`} className="text-2xl font-bold count-pop" style={{ color: '#8b5cf6' }}>
-            {totalSleepLifeMin > 0 ? `+${formatMinutes(totalSleepLifeMin)}` : '—'}
-          </div>
-          <div className="text-[10px] mt-1" style={{ color: '#3b1f72' }}>
-            Source : Irish et al. 2022, GeroScience 2025
           </div>
         </div>
 
