@@ -79,6 +79,19 @@ export const saveProfile = (profile) => {
   } catch {}
 }
 
+export const deleteEvent = (id) => {
+  try {
+    const events = getEvents()
+    const idx = events.findIndex(e => e.id === id)
+    if (idx === -1) return false
+    events.splice(idx, 1)
+    localStorage.setItem(KEY, JSON.stringify(events))
+    return true
+  } catch {
+    return false
+  }
+}
+
 export const clearAll = () => {
   try {
     localStorage.removeItem(KEY)

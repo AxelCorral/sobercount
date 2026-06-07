@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import {
-  getEvents, addEvent, clearAll, getProfile,
+  addEvent, clearAll, getProfile,
   isHydrationDoneToday, isSleepDoneToday,
 } from '../storage.js'
 import {
@@ -27,13 +27,14 @@ function calcStreak(events, type) {
   return streak
 }
 
-export default function HomeTab({ onNavigate }) {
-  const [events, setEvents] = useState(() => getEvents())
+export default function HomeTab({ onNavigate, events, onEventsChange }) {
   const [profile] = useState(() => getProfile())
-  const [hydratedToday, setHydratedToday] = useState(() => isHydrationDoneToday())
-  const [sleptToday, setSleptToday] = useState(() => isSleepDoneToday())
   const [showConfirm, setShowConfirm] = useState(false)
   const [showSportModal, setShowSportModal] = useState(false)
+
+  const today = new Date().toISOString().slice(0, 10)
+  const hydratedToday = events.some(e => e.type === 'hydration' && e.date === today)
+  const sleptToday = events.some(e => e.type === 'sleep' && e.date === today)
 
   const beers = events.filter(e => e.type === 'beer').length
   const cigarettes = events.filter(e => e.type === 'cigarette').length
@@ -60,46 +61,40 @@ export default function HomeTab({ onNavigate }) {
   const waterGoalMl = calculateDailyWaterGoal(profile)
   const sleepThresholdH = getSleepThreshold(profile?.age)
 
-  const refresh = () => setEvents(getEvents())
-
   const handleBeer = () => {
     if (navigator.vibrate) navigator.vibrate(50)
     addEvent('beer')
-    refresh()
+    onEventsChange()
   }
 
   const handleCig = () => {
     if (navigator.vibrate) navigator.vibrate(50)
     addEvent('cigarette')
-    refresh()
+    onEventsChange()
   }
 
   const handleSportConfirm = ({ sport_type_id, duration_minutes }) => {
     if (navigator.vibrate) navigator.vibrate(50)
     addEvent('sport', { sport_type_id, duration_minutes })
     setShowSportModal(false)
-    refresh()
+    onEventsChange()
   }
 
   const handleHydration = () => {
     if (navigator.vibrate) navigator.vibrate(50)
-    addEvent('hydration', { date: new Date().toISOString().slice(0, 10) })
-    refresh()
-    setHydratedToday(isHydrationDoneToday())
+    addEvent('hydration', { date: today })
+    onEventsChange()
   }
 
   const handleSleep = () => {
     if (navigator.vibrate) navigator.vibrate(50)
-    addEvent('sleep', { date: new Date().toISOString().slice(0, 10) })
-    refresh()
-    setSleptToday(isSleepDoneToday())
+    addEvent('sleep', { date: today })
+    onEventsChange()
   }
 
   const handleReset = () => {
     clearAll()
-    setEvents([])
-    setHydratedToday(false)
-    setSleptToday(false)
+    onEventsChange()
     setShowConfirm(false)
   }
 

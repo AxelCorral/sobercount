@@ -1,10 +1,10 @@
-import React from 'react'
+import React, { useState } from 'react'
 import {
   BarChart, Bar, LineChart, Line,
   XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer,
 } from 'recharts'
-import { getEvents, getProfile } from '../storage.js'
+import { getProfile, deleteEvent } from '../storage.js'
 import {
   MINUTES_PER_CIGARETTE,
   MINUTES_PER_BEER,
@@ -12,6 +12,20 @@ import {
   getSleepLifeGain,
 } from '../constants.js'
 import { formatMinutes, calcSportLifeMinutes } from '../utils.js'
+
+function formatEventTime(timestamp) {
+  const d = new Date(timestamp)
+  const todayStr = new Date().toISOString().slice(0, 10)
+  const yesterdayDate = new Date()
+  yesterdayDate.setDate(yesterdayDate.getDate() - 1)
+  const yesterdayStr = yesterdayDate.toISOString().slice(0, 10)
+  const eventDay = d.toISOString().slice(0, 10)
+  const time = d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+  if (eventDay === todayStr) return `aujourd'hui à ${time}`
+  if (eventDay === yesterdayStr) return `hier à ${time}`
+  const label = d.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'long' })
+  return `${label} à ${time}`
+}
 
 const TOOLTIP_STYLE = {
   backgroundColor: '#1a1a1a',
@@ -36,8 +50,8 @@ function shortDate(isoDay) {
   return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'numeric' })
 }
 
-export default function StatsTab() {
-  const events = getEvents()
+export default function StatsTab({ events, onEventsChange }) {
+  const [confirmDeleteId, setConfirmDeleteId] = useState(null)
   const profile = getProfile()
   const sleepGainPerNight = getSleepLifeGain(profile?.age)
 
@@ -154,9 +168,81 @@ export default function StatsTab() {
       'Min gagnées': sport,
     }))
 
+  const recentRefusals = [...events]
+    .filter(e => e.type === 'beer' || e.type === 'cigarette')
+    .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
+    .slice(0, 10)
+
+  const handleDelete = (id) => {
+    deleteEvent(id)
+    onEventsChange()
+    setConfirmDeleteId(null)
+  }
+
   return (
     <div className="p-4 pb-4">
       <h2 className="text-xl font-bold mb-4" style={{ color: '#f5f5f5' }}>Statistiques</h2>
+
+      {/* Corriger une entrée */}
+      <div className="rounded-2xl p-4 mb-4" style={{ backgroundColor: '#1a1a1a' }}>
+        <p className="text-sm font-semibold mb-3" style={{ color: '#e5e7eb' }}>
+          🗑 Corriger une entrée
+        </p>
+        {recentRefusals.length === 0 ? (
+          <p className="text-xs" style={{ color: '#4b5563' }}>Aucune entrée à corriger</p>
+        ) : (
+          <div
+            className="flex flex-col gap-1"
+            style={{ maxHeight: '200px', overflowY: 'auto' }}
+          >
+            {recentRefusals.map(e => (
+              <div key={e.id}>
+                <div
+                  className="flex items-center justify-between px-3 py-2 rounded-xl"
+                  style={{ backgroundColor: '#222222' }}
+                >
+                  <span className="text-xs" style={{ color: '#9ca3af' }}>
+                    {e.type === 'beer' ? '🍺 Pinte refusée' : '🚬 Clope refusée'}
+                    {' — '}
+                    <span style={{ color: '#6b7280' }}>{formatEventTime(e.timestamp)}</span>
+                  </span>
+                  <button
+                    onClick={() => setConfirmDeleteId(confirmDeleteId === e.id ? null : e.id)}
+                    className="ml-3 px-2 py-1 rounded-lg text-sm flex-shrink-0"
+                    style={{ backgroundColor: '#2a2a2a', color: '#6b7280' }}
+                  >
+                    🗑
+                  </button>
+                </div>
+                {confirmDeleteId === e.id && (
+                  <div
+                    className="flex items-center gap-2 px-3 py-2 mt-0.5 rounded-xl"
+                    style={{ backgroundColor: '#1f1212' }}
+                  >
+                    <span className="text-xs flex-1" style={{ color: '#9ca3af' }}>
+                      Supprimer cette entrée ?
+                    </span>
+                    <button
+                      onClick={() => handleDelete(e.id)}
+                      className="text-xs px-3 py-1 rounded-full font-medium"
+                      style={{ backgroundColor: '#7f1d1d', color: '#fca5a5' }}
+                    >
+                      Oui
+                    </button>
+                    <button
+                      onClick={() => setConfirmDeleteId(null)}
+                      className="text-xs px-3 py-1 rounded-full font-medium"
+                      style={{ backgroundColor: '#2a2a2a', color: '#9ca3af' }}
+                    >
+                      Non
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* Stat cards — refus */}
       <div className="flex gap-2 mb-2">

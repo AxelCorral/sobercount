@@ -1,5 +1,5 @@
 import React from 'react'
-import { getEvents, getProfile } from '../storage.js'
+import { getProfile } from '../storage.js'
 import { MINUTES_PER_CIGARETTE, MINUTES_PER_BEER, HYDRATION_LIFE_GAIN_MINUTES, getSleepLifeGain } from '../constants.js'
 import { formatMinutes, calcSportLifeMinutes } from '../utils.js'
 
@@ -30,8 +30,7 @@ function frenchDate(isoDay) {
   return str.charAt(0).toUpperCase() + str.slice(1)
 }
 
-export default function HistoryTab() {
-  const events = getEvents()
+export default function HistoryTab({ events }) {
   const profile = getProfile()
   const sleepGainPerNight = getSleepLifeGain(profile?.age)
   const groups = groupByDay(events)
