@@ -1,6 +1,0 @@
-node_modules
-dist
-.vercel
-*.local
-sc_shot.cjs
-screenshot_*.png

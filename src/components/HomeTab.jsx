@@ -45,8 +45,7 @@ export default function HomeTab({ onNavigate }) {
   const totalHydrationLifeMin = totalHydrationDays * HYDRATION_LIFE_GAIN_MINUTES
   const hydrationStreak = calcHydrationStreak(hydrationEvents)
 
-  const netMinutes = totalSportLifeMin + totalHydrationLifeMin - avoidLostMin
-  const netPositive = netMinutes >= 0
+  const totalLifeGainMin = avoidLostMin + totalSportLifeMin + totalHydrationLifeMin
 
   const waterGoalMl = calculateDailyWaterGoal(profile)
 
@@ -239,46 +238,23 @@ export default function HomeTab({ onNavigate }) {
           </div>
         </div>
 
-        {/* Vie gagnée — refus */}
+        {/* VIE GAGNÉE — total unique */}
         <div
-          className="rounded-2xl px-4 py-4 text-center mb-3"
+          className="rounded-2xl px-4 py-5 text-center mb-4"
           style={{ backgroundColor: '#061209', border: '2px solid #22c55e' }}
         >
-          <div className="text-xs mb-1 tracking-wide uppercase" style={{ color: '#4b5563' }}>
-            ⏱ Vie gagnée par refus
+          <div className="text-xs mb-2 tracking-widest uppercase font-semibold" style={{ color: '#4b5563' }}>
+            ⏱ Vie gagnée
           </div>
           <div
-            key={`t${avoidLostMin}`}
-            className="text-4xl font-bold my-1 count-pop"
+            key={`n${totalLifeGainMin}`}
+            className="text-5xl font-bold my-2 count-pop"
             style={{ color: '#22c55e' }}
           >
-            {avoidLostMin > 0 ? formatMinutes(avoidLostMin) : '—'}
+            {totalLifeGainMin > 0 ? `+${formatMinutes(totalLifeGainMin)}` : '—'}
           </div>
-          <div className="text-[10px]" style={{ color: '#374151' }}>
-            Sources : Lancet 2018, Doll &amp; Peto — BMJ 2004
-          </div>
-        </div>
-
-        {/* Bilan net */}
-        <div
-          className="rounded-2xl px-4 py-4 text-center mb-4"
-          style={{
-            backgroundColor: netPositive ? '#071410' : '#120707',
-            border: `2px solid ${netPositive ? '#22c55e' : '#ef4444'}`,
-          }}
-        >
-          <div className="text-xs mb-1 tracking-wide uppercase" style={{ color: '#4b5563' }}>
-            📊 Bilan espérance de vie
-          </div>
-          <div
-            key={`n${netMinutes}`}
-            className="text-4xl font-bold my-1 count-pop"
-            style={{ color: netPositive ? '#22c55e' : '#ef4444' }}
-          >
-            {netMinutes === 0 ? '—' : `${netPositive ? '+' : '−'}${formatMinutes(Math.abs(netMinutes))}`}
-          </div>
-          <div className="text-xs" style={{ color: '#374151' }}>
-            sport + hydratation − tabac &amp; alcool
+          <div className="text-xs" style={{ color: '#4b5563' }}>
+            sport · hydratation · vices refusés
           </div>
         </div>
 

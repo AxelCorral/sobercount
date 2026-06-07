@@ -89,7 +89,18 @@ export default function StatsTab() {
     Clopes: byDay[day]?.cigs ?? 0,
   }))
 
-  // Cumul par jour : refus + sport + hydration + bilan net
+  // Répartition des gains
+  const cigMin = totalCigs * MINUTES_PER_CIGARETTE
+  const beerMin = totalBeers * MINUTES_PER_BEER
+  const totalGainMin = totalAvoidMin + totalSportLifeMin + totalHydrationLifeMin
+  const breakdown = [
+    { label: '🏃 Sport', value: totalSportLifeMin, color: '#3b82f6' },
+    { label: '💧 Hydratation', value: totalHydrationLifeMin, color: '#06b6d4' },
+    { label: '🚬 Clopes refusées', value: cigMin, color: '#ef4444' },
+    { label: '🍺 Bières refusées', value: beerMin, color: '#f59e0b' },
+  ].filter(b => b.value > 0)
+
+  // Cumul par jour
   const sorted = [...events].sort((a, b) => a.timestamp.localeCompare(b.timestamp))
   let cumAvoid = 0, cumSport = 0, cumHydration = 0
   const cumByDay = {}
@@ -106,7 +117,7 @@ export default function StatsTab() {
       avoid: cumAvoid,
       sport: cumSport,
       hydration: cumHydration,
-      net: Math.round(cumSport + cumHydration - cumAvoid),
+      total: Math.round(cumAvoid + cumSport + cumHydration),
     }
   })
 
@@ -115,12 +126,12 @@ export default function StatsTab() {
   const hasHydration = totalHydratedDays > 0
   const hasSport = totalSportSessions > 0
 
-  const combinedLineData = cumulEntries.map(([day, { avoid, sport, hydration, net }]) => ({
+  const combinedLineData = cumulEntries.map(([day, { avoid, sport, hydration, total }]) => ({
     name: shortDate(day),
     'Refus': avoid,
     'Sport': sport,
     ...(hasHydration ? { 'Hydra': hydration } : {}),
-    'Bilan': net,
+    'Total': total,
   }))
 
   const sportLineData = cumulEntries
@@ -184,6 +195,44 @@ export default function StatsTab() {
           <div className="text-xs mt-0.5" style={{ color: '#6b7280' }}>⏱ hydratation</div>
         </div>
       </div>
+
+      {/* Répartition des gains */}
+      {breakdown.length > 0 && (
+        <div className="rounded-2xl p-4 mb-4" style={{ backgroundColor: '#1a1a1a' }}>
+          <p className="text-sm font-semibold mb-3" style={{ color: '#e5e7eb' }}>
+            Répartition de tes gains
+          </p>
+          <div className="flex flex-col gap-2">
+            {breakdown.map(({ label, value, color }) => {
+              const pct = totalGainMin > 0 ? Math.round((value / totalGainMin) * 100) : 0
+              return (
+                <div key={label}>
+                  <div className="flex justify-between text-xs mb-1">
+                    <span style={{ color: '#9ca3af' }}>{label}</span>
+                    <span style={{ color }}>{formatMinutes(value)} · {pct}%</span>
+                  </div>
+                  <div className="w-full rounded-full overflow-hidden" style={{ height: '6px', backgroundColor: '#2a2a2a' }}>
+                    <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: color }} />
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+          <div className="mt-3 pt-3" style={{ borderTop: '1px solid #2a2a2a' }}>
+            <div className="text-xs font-semibold flex justify-between mb-1" style={{ color: '#e5e7eb' }}>
+              <span>Total vie gagnée</span>
+              <span style={{ color: '#22c55e' }}>{formatMinutes(totalGainMin)}</span>
+            </div>
+            <div className="text-[10px]" style={{ color: '#6b7280' }}>
+              {[
+                totalSportLifeMin > 0 && `sport : ${formatMinutes(totalSportLifeMin)}`,
+                totalHydrationLifeMin > 0 && `hydratation : ${formatMinutes(totalHydrationLifeMin)}`,
+                totalAvoidMin > 0 && `vices refusés : ${formatMinutes(totalAvoidMin)}`,
+              ].filter(Boolean).join(' · ')}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Bar chart : refus 14 jours */}
       <div className="rounded-2xl p-4 mb-4" style={{ backgroundColor: '#1a1a1a' }}>
@@ -251,7 +300,7 @@ export default function StatsTab() {
             )}
             <Line
               type="monotone"
-              dataKey="Bilan"
+              dataKey="Total"
               stroke="#a3e635"
               strokeWidth={2.5}
               strokeDasharray="5 3"
@@ -277,7 +326,7 @@ export default function StatsTab() {
           )}
           <div className="flex items-center gap-1.5">
             <div className="w-4 h-0.5" style={{ backgroundColor: '#a3e635' }} />
-            <span className="text-xs" style={{ color: '#6b7280' }}>Bilan net</span>
+            <span className="text-xs" style={{ color: '#6b7280' }}>Total</span>
           </div>
         </div>
       </div>
