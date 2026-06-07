@@ -4,9 +4,14 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer,
 } from 'recharts'
-import { getEvents } from '../storage.js'
-import { MINUTES_PER_CIGARETTE, MINUTES_PER_BEER } from '../constants.js'
-import { formatMinutes } from '../utils.js'
+import { getEvents, getProfile } from '../storage.js'
+import {
+  MINUTES_PER_CIGARETTE,
+  MINUTES_PER_BEER,
+  HYDRATION_LIFE_GAIN_MINUTES,
+  getSleepLifeGain,
+} from '../constants.js'
+import { formatMinutes, calcSportLifeMinutes } from '../utils.js'
 
 const TOOLTIP_STYLE = {
   backgroundColor: '#1a1a1a',
@@ -33,35 +38,66 @@ function shortDate(isoDay) {
 
 export default function StatsTab() {
   const events = getEvents()
+  const profile = getProfile()
+  const sleepGainPerNight = getSleepLifeGain(profile?.age)
 
   const totalBeers = events.filter(e => e.type === 'beer').length
   const totalCigs = events.filter(e => e.type === 'cigarette').length
-  const totalMinutes = totalBeers * MINUTES_PER_BEER + totalCigs * MINUTES_PER_CIGARETTE
+  const totalAvoidMin = totalBeers * MINUTES_PER_BEER + totalCigs * MINUTES_PER_CIGARETTE
+
+  const sportEvents = events.filter(e => e.type === 'sport')
+  const totalSportSessions = sportEvents.length
+  const totalSportLifeMin = sportEvents.reduce((s, e) => s + calcSportLifeMinutes(e), 0)
+
+  const hydrationEvents = events.filter(e => e.type === 'hydration')
+  const totalHydratedDays = hydrationEvents.length
+  const totalHydrationLifeMin = totalHydratedDays * HYDRATION_LIFE_GAIN_MINUTES
+
+  const sleepEvents = events.filter(e => e.type === 'sleep')
+  const totalSleepNights = sleepEvents.length
+  const totalSleepLifeMin = totalSleepNights * sleepGainPerNight
+
+  // % de jours hydratés/dormis parmi les jours depuis la première activité
+  const allDates = events.map(e => e.timestamp.slice(0, 10)).sort()
+  const firstDate = allDates[0]
+  const today = new Date().toISOString().slice(0, 10)
+  const totalDays = firstDate
+    ? Math.max(1, Math.round((new Date(today + 'T12:00:00') - new Date(firstDate + 'T12:00:00')) / 86400000) + 1)
+    : 1
+  const hydrationPct = Math.round((totalHydratedDays / totalDays) * 100)
+  const sleepPct = Math.round((totalSleepNights / totalDays) * 100)
+
+  // Répartition des gains
+  const cigMin = totalCigs * MINUTES_PER_CIGARETTE
+  const beerMin = totalBeers * MINUTES_PER_BEER
+  const totalGainMin = totalAvoidMin + totalSportLifeMin + totalHydrationLifeMin + totalSleepLifeMin
+  const breakdown = [
+    { label: '🏃 Sport', value: totalSportLifeMin, color: '#3b82f6' },
+    { label: '💧 Hydratation', value: totalHydrationLifeMin, color: '#06b6d4' },
+    { label: '🚬 Clopes refusées', value: cigMin, color: '#ef4444' },
+    { label: '🍺 Bières refusées', value: beerMin, color: '#f59e0b' },
+    { label: '😴 Sommeil', value: totalSleepLifeMin, color: '#8b5cf6' },
+  ].filter(b => b.value > 0)
 
   if (events.length === 0) {
     return (
-      <div
-        className="flex flex-col items-center justify-center text-center p-8"
-        style={{ minHeight: '70vh' }}
-      >
+      <div className="flex flex-col items-center justify-center text-center p-8" style={{ minHeight: '70vh' }}>
         <div className="text-6xl mb-4">📊</div>
-        <p className="text-lg font-medium" style={{ color: '#9ca3af' }}>
-          Pas encore de données
-        </p>
+        <p className="text-lg font-medium" style={{ color: '#9ca3af' }}>Pas encore de données</p>
         <p className="text-sm mt-2" style={{ color: '#6b7280' }}>
-          Refuse quelques verres pour voir tes stats !
+          Commence à logger tes activités pour voir tes stats !
         </p>
       </div>
     )
   }
 
-  // Bar chart : 14 derniers jours
+  // Bar chart: 14 derniers jours (refus)
   const byDay = {}
   events.forEach(e => {
     const day = e.timestamp.slice(0, 10)
     if (!byDay[day]) byDay[day] = { beers: 0, cigs: 0 }
     if (e.type === 'beer') byDay[day].beers++
-    else byDay[day].cigs++
+    else if (e.type === 'cigarette') byDay[day].cigs++
   })
 
   const barData = getLast14DayKeys().map(day => ({
@@ -70,54 +106,155 @@ export default function StatsTab() {
     Clopes: byDay[day]?.cigs ?? 0,
   }))
 
-  // Line chart : cumul vie gagnée
+  // Cumul par jour — tous axes
   const sorted = [...events].sort((a, b) => a.timestamp.localeCompare(b.timestamp))
+  let cumAvoid = 0, cumSport = 0, cumHydration = 0, cumSleep = 0
   const cumByDay = {}
-  let cum = 0
+
   sorted.forEach(e => {
-    const day = e.timestamp.slice(0, 10)
-    cum += e.type === 'beer' ? MINUTES_PER_BEER : MINUTES_PER_CIGARETTE
-    cumByDay[day] = cum
+    const day = (e.type === 'hydration' || e.type === 'sleep')
+      ? (e.date || e.timestamp.slice(0, 10))
+      : e.timestamp.slice(0, 10)
+    if (e.type === 'beer') cumAvoid += MINUTES_PER_BEER
+    else if (e.type === 'cigarette') cumAvoid += MINUTES_PER_CIGARETTE
+    else if (e.type === 'sport') cumSport += calcSportLifeMinutes(e)
+    else if (e.type === 'hydration') cumHydration += HYDRATION_LIFE_GAIN_MINUTES
+    else if (e.type === 'sleep') cumSleep += sleepGainPerNight
+    cumByDay[day] = {
+      avoid: cumAvoid,
+      sport: cumSport,
+      hydration: cumHydration,
+      sleep: cumSleep,
+      total: Math.round(cumAvoid + cumSport + cumHydration + cumSleep),
+    }
   })
-  const lineData = Object.entries(cumByDay)
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([day, minutes]) => ({ name: shortDate(day), 'Min gagnées': minutes }))
+
+  const cumulEntries = Object.entries(cumByDay).sort(([a], [b]) => a.localeCompare(b))
+
+  const hasHydration = totalHydratedDays > 0
+  const hasSport = totalSportSessions > 0
+  const hasSleep = totalSleepNights > 0
+
+  const combinedLineData = cumulEntries.map(([day, { avoid, sport, hydration, sleep, total }]) => ({
+    name: shortDate(day),
+    'Refus': avoid,
+    ...(hasSport ? { 'Sport': sport } : {}),
+    ...(hasHydration ? { 'Hydra': hydration } : {}),
+    ...(hasSleep ? { 'Sommeil': sleep } : {}),
+    'Total': total,
+  }))
+
+  const sportLineData = cumulEntries
+    .filter(([, d]) => d.sport > 0)
+    .map(([day, { sport }]) => ({ name: shortDate(day), 'Min gagnées': sport }))
 
   return (
     <div className="p-4 pb-4">
-      <h2 className="text-xl font-bold mb-4" style={{ color: '#f5f5f5' }}>
-        Statistiques
-      </h2>
+      <h2 className="text-xl font-bold mb-4" style={{ color: '#f5f5f5' }}>Statistiques</h2>
 
-      {/* Stat cards all-time */}
-      <div className="flex gap-3 mb-4">
-        <div className="flex-1 rounded-2xl p-4 text-center" style={{ backgroundColor: '#1a1a1a' }}>
-          <div className="text-3xl font-bold" style={{ color: '#f59e0b' }}>{totalBeers}</div>
-          <div className="text-xs mt-1" style={{ color: '#6b7280' }}>🍺 pintes</div>
+      {/* Stat cards — refus */}
+      <div className="flex gap-2 mb-2">
+        <div className="flex-1 rounded-2xl p-3 text-center" style={{ backgroundColor: '#1a1a1a' }}>
+          <div className="text-2xl font-bold" style={{ color: '#f59e0b' }}>{totalBeers}</div>
+          <div className="text-xs mt-0.5" style={{ color: '#6b7280' }}>🍺 pintes</div>
         </div>
-        <div className="flex-1 rounded-2xl p-4 text-center" style={{ backgroundColor: '#1a1a1a' }}>
-          <div className="text-3xl font-bold" style={{ color: '#ef4444' }}>{totalCigs}</div>
-          <div className="text-xs mt-1" style={{ color: '#6b7280' }}>🚬 clopes</div>
+        <div className="flex-1 rounded-2xl p-3 text-center" style={{ backgroundColor: '#1a1a1a' }}>
+          <div className="text-2xl font-bold" style={{ color: '#ef4444' }}>{totalCigs}</div>
+          <div className="text-xs mt-0.5" style={{ color: '#6b7280' }}>🚬 clopes</div>
         </div>
-        <div className="flex-1 rounded-2xl p-4 text-center" style={{ backgroundColor: '#061209', border: '1px solid #22c55e' }}>
-          <div className="text-xl font-bold leading-tight" style={{ color: '#22c55e' }}>
-            {formatMinutes(totalMinutes)}
+        <div className="flex-1 rounded-2xl p-3 text-center" style={{ backgroundColor: '#061209', border: '1px solid #22c55e' }}>
+          <div className="text-lg font-bold leading-tight" style={{ color: '#22c55e' }}>
+            {totalAvoidMin > 0 ? formatMinutes(totalAvoidMin) : '—'}
           </div>
-          <div className="text-xs mt-1" style={{ color: '#6b7280' }}>⏱ gagnées</div>
+          <div className="text-xs mt-0.5" style={{ color: '#6b7280' }}>⏱ évités</div>
         </div>
       </div>
 
-      {/* Bar chart */}
+      {/* Stat cards — sport */}
+      <div className="flex gap-2 mb-2">
+        <div className="flex-1 rounded-2xl p-3 text-center" style={{ backgroundColor: '#0a1628', border: '1px solid #3b82f6' }}>
+          <div className="text-2xl font-bold" style={{ color: '#3b82f6' }}>{totalSportSessions}</div>
+          <div className="text-xs mt-0.5" style={{ color: '#6b7280' }}>🏃 séances</div>
+        </div>
+        <div className="flex-1 rounded-2xl p-3 text-center" style={{ backgroundColor: '#0a1628', border: '1px solid #3b82f6' }}>
+          <div className="text-lg font-bold leading-tight" style={{ color: '#3b82f6' }}>
+            {totalSportLifeMin > 0 ? formatMinutes(totalSportLifeMin) : '—'}
+          </div>
+          <div className="text-xs mt-0.5" style={{ color: '#6b7280' }}>⏱ sport</div>
+        </div>
+      </div>
+
+      {/* Stat cards — hydratation + sommeil */}
+      <div className="flex gap-2 mb-4">
+        <div className="flex-1 rounded-2xl p-3 text-center" style={{ backgroundColor: '#071620', border: '1px solid #06b6d4' }}>
+          <div className="text-2xl font-bold" style={{ color: '#06b6d4' }}>{totalHydratedDays}</div>
+          <div className="text-xs mt-0.5" style={{ color: '#6b7280' }}>💧 jours hydratés</div>
+          {totalHydratedDays > 0 && (
+            <div className="text-[10px] mt-0.5" style={{ color: '#0e7490' }}>
+              {hydrationPct}% de {totalDays}j
+            </div>
+          )}
+        </div>
+        <div className="flex-1 rounded-2xl p-3 text-center" style={{ backgroundColor: '#130e20', border: '1px solid #8b5cf6' }}>
+          <div className="text-2xl font-bold" style={{ color: '#8b5cf6' }}>{totalSleepNights}</div>
+          <div className="text-xs mt-0.5" style={{ color: '#6b7280' }}>😴 nuits suffisantes</div>
+          {totalSleepNights > 0 && (
+            <div className="text-[10px] mt-0.5" style={{ color: '#6d28d9' }}>
+              {sleepPct}% de {totalDays}j
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Répartition des gains */}
+      {breakdown.length > 0 && (
+        <div className="rounded-2xl p-4 mb-4" style={{ backgroundColor: '#1a1a1a' }}>
+          <p className="text-sm font-semibold mb-3" style={{ color: '#e5e7eb' }}>
+            Répartition de tes gains
+          </p>
+          <div className="flex flex-col gap-2">
+            {breakdown.map(({ label, value, color }) => {
+              const pct = totalGainMin > 0 ? Math.round((value / totalGainMin) * 100) : 0
+              return (
+                <div key={label}>
+                  <div className="flex justify-between text-xs mb-1">
+                    <span style={{ color: '#9ca3af' }}>{label}</span>
+                    <span style={{ color }}>{formatMinutes(value)} · {pct}%</span>
+                  </div>
+                  <div className="w-full rounded-full overflow-hidden" style={{ height: '6px', backgroundColor: '#2a2a2a' }}>
+                    <div
+                      className="h-full rounded-full"
+                      style={{ width: `${pct}%`, backgroundColor: color }}
+                    />
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+          <div className="mt-3 pt-3" style={{ borderTop: '1px solid #2a2a2a' }}>
+            <div className="text-xs font-semibold flex justify-between mb-1" style={{ color: '#e5e7eb' }}>
+              <span>Total vie gagnée</span>
+              <span style={{ color: '#22c55e' }}>{formatMinutes(totalGainMin)}</span>
+            </div>
+            <div className="text-[10px]" style={{ color: '#6b7280' }}>
+              {[
+                totalSportLifeMin > 0 && `sport : ${formatMinutes(totalSportLifeMin)}`,
+                totalHydrationLifeMin > 0 && `hydratation : ${formatMinutes(totalHydrationLifeMin)}`,
+                totalAvoidMin > 0 && `vices refusés : ${formatMinutes(totalAvoidMin)}`,
+                totalSleepLifeMin > 0 && `sommeil : ${formatMinutes(totalSleepLifeMin)}`,
+              ].filter(Boolean).join(' · ')}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bar chart : refus 14 jours */}
       <div className="rounded-2xl p-4 mb-4" style={{ backgroundColor: '#1a1a1a' }}>
         <p className="text-sm font-semibold mb-3" style={{ color: '#e5e7eb' }}>
           Évitements — 14 derniers jours
         </p>
-        <ResponsiveContainer width="100%" height={180}>
-          <BarChart
-            data={barData}
-            barCategoryGap="25%"
-            margin={{ top: 4, right: 4, left: -28, bottom: 0 }}
-          >
+        <ResponsiveContainer width="100%" height={160}>
+          <BarChart data={barData} barCategoryGap="25%" margin={{ top: 4, right: 4, left: -28, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#222222" vertical={false} />
             <XAxis dataKey="name" tick={TICK} interval={1} />
             <YAxis tick={TICK} allowDecimals={false} width={32} />
@@ -138,31 +275,85 @@ export default function StatsTab() {
         </div>
       </div>
 
-      {/* Line chart */}
-      <div className="rounded-2xl p-4" style={{ backgroundColor: '#1a1a1a' }}>
+      {/* Line chart : bilan cumulé */}
+      <div className="rounded-2xl p-4 mb-4" style={{ backgroundColor: '#1a1a1a' }}>
         <p className="text-sm font-semibold mb-3" style={{ color: '#e5e7eb' }}>
           Vie gagnée cumulée (minutes)
         </p>
         <ResponsiveContainer width="100%" height={180}>
-          <LineChart
-            data={lineData}
-            margin={{ top: 4, right: 10, left: -28, bottom: 0 }}
-          >
+          <LineChart data={combinedLineData} margin={{ top: 4, right: 10, left: -28, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#222222" vertical={false} />
             <XAxis dataKey="name" tick={TICK} />
             <YAxis tick={TICK} width={32} />
             <Tooltip contentStyle={TOOLTIP_STYLE} />
-            <Line
-              type="monotone"
-              dataKey="Min gagnées"
-              stroke="#22c55e"
-              strokeWidth={2.5}
-              dot={{ fill: '#22c55e', r: 3, strokeWidth: 0 }}
-              activeDot={{ r: 5, fill: '#22c55e', strokeWidth: 0 }}
-            />
+            <Line type="monotone" dataKey="Refus" stroke="#22c55e" strokeWidth={2} dot={false}
+              activeDot={{ r: 4, fill: '#22c55e', strokeWidth: 0 }} />
+            {hasSport && (
+              <Line type="monotone" dataKey="Sport" stroke="#3b82f6" strokeWidth={2} dot={false}
+                activeDot={{ r: 4, fill: '#3b82f6', strokeWidth: 0 }} />
+            )}
+            {hasHydration && (
+              <Line type="monotone" dataKey="Hydra" stroke="#06b6d4" strokeWidth={2} dot={false}
+                activeDot={{ r: 4, fill: '#06b6d4', strokeWidth: 0 }} />
+            )}
+            {hasSleep && (
+              <Line type="monotone" dataKey="Sommeil" stroke="#8b5cf6" strokeWidth={2} dot={false}
+                activeDot={{ r: 4, fill: '#8b5cf6', strokeWidth: 0 }} />
+            )}
+            <Line type="monotone" dataKey="Total" stroke="#a3e635" strokeWidth={2.5}
+              strokeDasharray="5 3" dot={false}
+              activeDot={{ r: 4, fill: '#a3e635', strokeWidth: 0 }} />
           </LineChart>
         </ResponsiveContainer>
+        <div className="flex gap-3 justify-center mt-2 flex-wrap">
+          <div className="flex items-center gap-1.5">
+            <div className="w-4 h-0.5" style={{ backgroundColor: '#22c55e' }} />
+            <span className="text-xs" style={{ color: '#6b7280' }}>Refus</span>
+          </div>
+          {hasSport && (
+            <div className="flex items-center gap-1.5">
+              <div className="w-4 h-0.5" style={{ backgroundColor: '#3b82f6' }} />
+              <span className="text-xs" style={{ color: '#6b7280' }}>Sport</span>
+            </div>
+          )}
+          {hasHydration && (
+            <div className="flex items-center gap-1.5">
+              <div className="w-4 h-0.5" style={{ backgroundColor: '#06b6d4' }} />
+              <span className="text-xs" style={{ color: '#6b7280' }}>Hydra</span>
+            </div>
+          )}
+          {hasSleep && (
+            <div className="flex items-center gap-1.5">
+              <div className="w-4 h-0.5" style={{ backgroundColor: '#8b5cf6' }} />
+              <span className="text-xs" style={{ color: '#6b7280' }}>Sommeil</span>
+            </div>
+          )}
+          <div className="flex items-center gap-1.5">
+            <div className="w-4 h-0.5" style={{ backgroundColor: '#a3e635' }} />
+            <span className="text-xs" style={{ color: '#6b7280' }}>Total</span>
+          </div>
+        </div>
       </div>
+
+      {/* Line chart : sport cumulé standalone */}
+      {hasSport && (
+        <div className="rounded-2xl p-4" style={{ backgroundColor: '#1a1a1a' }}>
+          <p className="text-sm font-semibold mb-3" style={{ color: '#e5e7eb' }}>
+            Vie gagnée par le sport (cumulée)
+          </p>
+          <ResponsiveContainer width="100%" height={160}>
+            <LineChart data={sportLineData} margin={{ top: 4, right: 10, left: -28, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#222222" vertical={false} />
+              <XAxis dataKey="name" tick={TICK} />
+              <YAxis tick={TICK} width={32} />
+              <Tooltip contentStyle={TOOLTIP_STYLE} />
+              <Line type="monotone" dataKey="Min gagnées" stroke="#3b82f6" strokeWidth={2.5}
+                dot={{ fill: '#3b82f6', r: 3, strokeWidth: 0 }}
+                activeDot={{ r: 5, fill: '#3b82f6', strokeWidth: 0 }} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      )}
     </div>
   )
 }
