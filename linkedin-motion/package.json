@@ -1,0 +1,37 @@
+{
+  "name": "linkedin-motion",
+  "version": "1.0.0",
+  "description": "Vidéo LinkedIn motion design — Axel Corral",
+  "repository": {},
+  "license": "UNLICENSED",
+  "private": true,
+  "dependencies": {
+    "@remotion/bundler": "4.0.532",
+    "@remotion/cli": "4.0.532",
+    "@remotion/google-fonts": "4.0.532",
+    "@remotion/renderer": "4.0.532",
+    "@remotion/transitions": "4.0.532",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "remotion": "4.0.532"
+  },
+  "devDependencies": {
+    "@remotion/eslint-config-flat": "4.0.532",
+    "@types/react": "19.2.7",
+    "@types/web": "0.0.166",
+    "eslint": "9.39.5",
+    "prettier": "3.8.1",
+    "typescript": "5.9.3"
+  },
+  "scripts": {
+    "dev": "remotion studio",
+    "build": "remotion bundle",
+    "upgrade": "remotion upgrade",
+    "lint": "eslint src && tsc",
+    "stills": "node scripts/stills.mjs",
+    "render": "remotion render AxelLinkedIn out/axel-linkedin.mp4",
+    "render:square": "remotion render AxelLinkedInSquare out/axel-linkedin-square.mp4",
+    "render:all": "npm run render && npm run render:square",
+    "check": "node scripts/check-output.mjs"
+  }
+}
