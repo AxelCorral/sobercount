@@ -1,5 +1,5 @@
 // Vérifie durée (17–19 s) et poids (< 50 Mo) des vidéos rendues.
-import { execFileSync } from "node:child_process";
+import { execSync } from "node:child_process";
 import { existsSync, statSync } from "node:fs";
 
 const files = ["out/axel-linkedin.mp4", "out/axel-linkedin-square.mp4"];
@@ -11,20 +11,13 @@ for (const file of files) {
     ok = false;
     continue;
   }
-  const raw = execFileSync(
-    "npx",
-    [
-      "remotion",
-      "ffprobe",
-      "-v",
-      "error",
-      "-show_entries",
-      "format=duration:stream=codec_name,width,height,r_frame_rate",
-      "-of",
-      "json",
-      file,
-    ],
-    { encoding: "utf8", shell: process.platform === "win32" },
+  // Une seule chaîne de commande : fonctionne avec npx sous Windows comme
+  // sous macOS/Linux, sans l'avertissement DEP0190 de Node.
+  const raw = execSync(
+    `npx remotion ffprobe -v error -show_entries ` +
+      `"format=duration:stream=codec_name,width,height,r_frame_rate" ` +
+      `-of json "${file}"`,
+    { encoding: "utf8" },
   );
   const info = JSON.parse(raw);
   const duration = Number(info.format.duration);
